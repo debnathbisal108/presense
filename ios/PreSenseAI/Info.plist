@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- ios/PreSenseAI/Info.plist -->
+<!-- PreSense AI — iOS Info.plist -->
+
+<plist version="1.0">
+<dict>
+
+    <!-- ── App Identity ──────────────────────────────────────────────────── -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>PreSense AI</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>PreSenseAI</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <!-- ── HealthKit ──────────────────────────────────────────────────────── -->
+    <!-- Required for Apple HealthKit access -->
+    <key>NSHealthShareUsageDescription</key>
+    <string>PreSense AI reads your step count, heart rate, active energy, and sleep data to generate behavioral health risk predictions. All processing happens on your device — no data is sent to any server.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>PreSense AI does not write to HealthKit.</string>
+
+    <!-- ── Motion & Fitness ───────────────────────────────────────────────── -->
+    <key>NSMotionUsageDescription</key>
+    <string>PreSense AI uses motion data to estimate your activity level and physical state. This helps improve prediction accuracy.</string>
+
+    <!-- ── Background Modes ───────────────────────────────────────────────── -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <!-- Background fetch for periodic sensor reads -->
+        <string>fetch</string>
+        <!-- HealthKit background delivery -->
+        <string>healthkit</string>
+        <!-- Background processing for simulation ticks -->
+        <string>processing</string>
+    </array>
+
+    <!-- ── Background Task Identifiers ───────────────────────────────────── -->
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+        <string>com.presenseai.simulation-tick</string>
+        <string>com.presenseai.inference</string>
+    </array>
+
+    <!-- ── UI Configuration ──────────────────────────────────────────────── -->
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>arm64</string>
+    </array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <false/>
+    <key>UIStatusBarStyle</key>
+    <string>UIStatusBarStyleLightContent</string>
+
+    <!-- ── App Transport Security ─────────────────────────────────────────── -->
+    <!-- All inference is on-device — no network requests to health APIs -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+    </dict>
+
+    <!-- ── Privacy manifest stub ─────────────────────────────────────────── -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>C617.1</string>
+            </array>
+        </dict>
+    </array>
+
+</dict>
+</plist>

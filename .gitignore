@@ -1,0 +1,88 @@
+# PreSense AI — .gitignore
+
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── React Native ──────────────────────────────────────────────────────────────
+.expo/
+dist/
+web-build/
+
+# ── Android ───────────────────────────────────────────────────────────────────
+android/.gradle
+android/build/
+android/app/build/
+android/app/debug.keystore   # already committed as a dev keystore placeholder
+android/local.properties
+android/keystore.properties  # NEVER commit real keystore credentials
+
+# ── CRITICAL: Never commit signing keys to source control ────────────────────
+*.jks
+*.keystore
+*.p12
+*.p8
+google-play-key.json
+google-play-service-account.json
+AuthKey_*.p8
+
+# ── iOS ───────────────────────────────────────────────────────────────────────
+ios/build/
+ios/Pods/
+ios/*.xcworkspace/xcuserdata
+ios/*.xcodeproj/xcuserdata
+ios/*.xcodeproj/project.xcworkspace/xcuserdata
+ios/DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Provisioning profiles (managed by match/CI — not stored in repo)
+*.mobileprovision
+*.provisionprofile
+
+# ── TFLite model ─────────────────────────────────────────────────────────────
+# The model is injected at build time via CI secrets or Git LFS.
+# Uncomment the line below if you're NOT using Git LFS for the model.
+# *.tflite
+# *.onnx
+
+# If using Git LFS, these are tracked by LFS, not raw git:
+# (configure with: git lfs track "*.tflite")
+
+# ── Fastlane ─────────────────────────────────────────────────────────────────
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+fastlane/builds/
+fastlane/google-play-key.json
+
+# ── Environment ───────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+coverage/
+*.lcov
+junit.xml
+
+# ── Metro bundler ─────────────────────────────────────────────────────────────
+.metro-health-check*
+
+# ── Temporary ─────────────────────────────────────────────────────────────────
+tmp/
+*.tmp
+*.log

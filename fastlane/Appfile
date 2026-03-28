@@ -1,0 +1,12 @@
+# fastlane/Appfile
+# App identifiers for Fastlane
+
+# iOS
+app_identifier "com.presenseai"
+apple_id       ENV["APPLE_ID"] || "developer@presenseai.com"
+team_id        ENV["APPLE_TEAM_ID"]
+itc_team_id    ENV["APP_STORE_CONNECT_TEAM_ID"]
+
+# Android
+json_key_file  ENV["GOOGLE_PLAY_JSON_KEY_PATH"] || "fastlane/google-play-key.json"
+package_name   "com.presenseai"

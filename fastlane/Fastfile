@@ -1,0 +1,255 @@
+# fastlane/Fastfile
+# ─────────────────────────────────────────────────────────────────────────────
+# PreSense AI — Fastlane Automation
+#
+# Lanes:
+#   iOS:
+#     bundle exec fastlane ios test           → run tests in simulator
+#     bundle exec fastlane ios beta           → build + upload to TestFlight
+#     bundle exec fastlane ios release        → build + submit to App Store
+#
+#   Android:
+#     bundle exec fastlane android test       → run tests
+#     bundle exec fastlane android beta       → build + upload to Play Internal
+#     bundle exec fastlane android release    → build + upload to Play Production
+#
+# Install: gem install fastlane  (or use bundler: bundle install)
+# ─────────────────────────────────────────────────────────────────────────────
+
+default_platform(:ios)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def ensure_js_bundle(platform)
+  sh(
+    "npx react-native bundle " \
+    "--platform #{platform} " \
+    "--dev false " \
+    "--entry-file index.js " \
+    "--bundle-output #{platform == 'ios' ? 'ios/main.jsbundle' : 'android/app/src/main/assets/index.android.bundle'} " \
+    "--assets-dest #{platform == 'ios' ? 'ios' : 'android/app/src/main/res'}"
+  )
+  UI.success("✅ JS bundle created for #{platform}")
+end
+
+def bump_version(bump_type: :patch)
+  # Reads version from package.json, bumps it, writes back
+  package_json = JSON.parse(File.read("../package.json"))
+  parts = package_json["version"].split(".").map(&:to_i)
+  case bump_type
+  when :major then parts[0] += 1; parts[1] = 0; parts[2] = 0
+  when :minor then parts[1] += 1; parts[2] = 0
+  when :patch then parts[2] += 1
+  end
+  new_version = parts.join(".")
+  package_json["version"] = new_version
+  File.write("../package.json", JSON.pretty_generate(package_json))
+  UI.message("📦 Version bumped to #{new_version}")
+  new_version
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# iOS Lanes
+# ─────────────────────────────────────────────────────────────────────────────
+
+platform :ios do
+
+  before_all do
+    # Ensure we're on a clean git state for release builds
+    # ensure_git_status_clean if ENV["CI"]
+  end
+
+  desc "Run iOS tests in simulator"
+  lane :test do
+    run_tests(
+      workspace:   "ios/PreSenseAI.xcworkspace",
+      scheme:      "PreSenseAI",
+      devices:     ["iPhone 15 Pro"],
+      clean:       true,
+      code_coverage: true,
+      output_directory: "fastlane/test_output",
+    )
+    UI.success("✅ iOS tests passed")
+  end
+
+  desc "Build and upload to TestFlight (internal beta)"
+  lane :beta do
+    # Sync signing via App Store Connect API
+    api_key = app_store_connect_api_key(
+      key_id:         ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id:      ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_content:    Base64.decode64(ENV["APP_STORE_CONNECT_KEY_BASE64"] || ""),
+      in_house:       false,
+    )
+
+    # Auto-manage provisioning profiles
+    match(
+      type:           "appstore",
+      app_identifier: "com.presenseai",
+      readonly:       true,
+      api_key:        api_key,
+    )
+
+    # Bundle JS
+    ensure_js_bundle("ios")
+
+    # Increment build number (uses latest from TestFlight)
+    increment_build_number(
+      build_number:  latest_testflight_build_number(api_key: api_key) + 1,
+      xcodeproj:     "ios/PreSenseAI.xcodeproj",
+    )
+
+    # Build
+    build_ios_app(
+      workspace:      "ios/PreSenseAI.xcworkspace",
+      scheme:         "PreSenseAI",
+      configuration:  "Release",
+      export_method:  "app-store",
+      output_directory: "fastlane/builds",
+      output_name:    "PreSenseAI.ipa",
+      clean:          true,
+    )
+
+    # Upload to TestFlight
+    upload_to_testflight(
+      api_key:                    api_key,
+      ipa:                        "fastlane/builds/PreSenseAI.ipa",
+      skip_waiting_for_build_processing: true,
+      changelog:                  changelog_from_git_commits(
+        between:  [last_git_tag, "HEAD"],
+        pretty:   "- %s",
+        date_format: "short",
+      ),
+    )
+
+    # Notify
+    slack(
+      message:    "🍎 iOS beta uploaded to TestFlight",
+      success:    true,
+      payload:    { "Build" => lane_context[SharedValues::BUILD_NUMBER] },
+    ) if ENV["SLACK_URL"]
+
+    UI.success("✅ Uploaded to TestFlight")
+  end
+
+  desc "Submit to App Store for review"
+  lane :release do
+    api_key = app_store_connect_api_key(
+      key_id:       ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id:    ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_content:  Base64.decode64(ENV["APP_STORE_CONNECT_KEY_BASE64"] || ""),
+    )
+
+    ensure_js_bundle("ios")
+
+    build_ios_app(
+      workspace:     "ios/PreSenseAI.xcworkspace",
+      scheme:        "PreSenseAI",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "fastlane/builds",
+      clean:         true,
+    )
+
+    deliver(
+      api_key:             api_key,
+      ipa:                 "fastlane/builds/PreSenseAI.ipa",
+      submit_for_review:   true,
+      automatic_release:   false,
+      force:               true,
+      skip_screenshots:    true,
+      skip_metadata:       false,
+    )
+
+    UI.success("✅ Submitted to App Store for review")
+  end
+
+  error do |lane, exception|
+    slack(
+      message:  "❌ iOS #{lane} failed: #{exception.message}",
+      success:  false,
+    ) if ENV["SLACK_URL"]
+  end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Android Lanes
+# ─────────────────────────────────────────────────────────────────────────────
+
+platform :android do
+
+  desc "Run Android tests"
+  lane :test do
+    gradle(
+      task:    "test",
+      project_dir: "android/",
+    )
+    UI.success("✅ Android tests passed")
+  end
+
+  desc "Build signed AAB and upload to Play Store Internal Testing"
+  lane :beta do
+    ensure_js_bundle("android")
+
+    # Bump version code
+    android_set_version_code(
+      gradle_file: "android/app/build.gradle",
+      version_code: google_play_track_version_codes(
+        track: "internal",
+        package_name: "com.presenseai",
+        json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
+      ).max + 1,
+    )
+
+    gradle(
+      task:              "bundle",
+      build_type:        "Release",
+      project_dir:       "android/",
+      properties: {
+        "PRESENSE_KEYSTORE_PATH"     => ENV["PRESENSE_KEYSTORE_PATH"]     || "presense-release.jks",
+        "PRESENSE_KEYSTORE_PASSWORD" => ENV["PRESENSE_KEYSTORE_PASSWORD"],
+        "PRESENSE_KEY_ALIAS"         => ENV["PRESENSE_KEY_ALIAS"],
+        "PRESENSE_KEY_PASSWORD"      => ENV["PRESENSE_KEY_PASSWORD"],
+      }
+    )
+
+    upload_to_play_store(
+      track:           "internal",
+      aab:             "android/app/build/outputs/bundle/release/app-release.aab",
+      json_key_data:   ENV["GOOGLE_PLAY_JSON_KEY"],
+      package_name:    "com.presenseai",
+      skip_upload_apk: true,
+      release_status:  "completed",
+    )
+
+    slack(
+      message: "🤖 Android beta uploaded to Play Internal Testing",
+      success: true,
+    ) if ENV["SLACK_URL"]
+
+    UI.success("✅ Uploaded to Play Store Internal Testing")
+  end
+
+  desc "Promote Internal build to Production"
+  lane :release do
+    upload_to_play_store(
+      track:           "production",
+      json_key_data:   ENV["GOOGLE_PLAY_JSON_KEY"],
+      package_name:    "com.presenseai",
+      track_promote_to: "production",
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      rollout:         "0.10",   # 10% staged rollout
+    )
+    UI.success("✅ Promoted to Play Store Production (10% rollout)")
+  end
+
+  error do |lane, exception|
+    slack(
+      message:  "❌ Android #{lane} failed: #{exception.message}",
+      success:  false,
+    ) if ENV["SLACK_URL"]
+  end
+end

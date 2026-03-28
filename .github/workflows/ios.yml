@@ -1,0 +1,306 @@
+# .github/workflows/ios.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# PreSense AI — iOS Build Pipeline
+#
+# Triggers:
+#   • Push to main / develop → simulator build (smoke test, no signing)
+#   • Tags v*.*.* / release  → signed IPA → TestFlight
+#   • Manual dispatch        → choose target
+#
+# Secrets required:
+#   BUILD_CERTIFICATE_BASE64       P12 distribution cert (base64)
+#   P12_PASSWORD                   P12 certificate password
+#   BUILD_PROVISION_PROFILE_BASE64 Provisioning profile (base64)
+#   KEYCHAIN_PASSWORD              Temp keychain password (any string)
+#   APP_STORE_CONNECT_API_KEY_ID   App Store Connect API Key ID
+#   APP_STORE_CONNECT_ISSUER_ID    App Store Connect Issuer ID
+#   APP_STORE_CONNECT_KEY_BASE64   App Store Connect Auth Key .p8 (base64)
+#   MODEL_TFLITE_BASE64            Pre-trained TFLite model (base64)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: 🍎 iOS Build
+
+on:
+  push:
+    branches: [main, develop]
+    tags:     ['v*.*.*']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: 'Build destination'
+        required: true
+        default: 'simulator'
+        type: choice
+        options: [simulator, device, testflight]
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION:   '20'
+  XCODE_VERSION:  '15.3'
+  RUBY_VERSION:   '3.2'
+  SCHEME:         'PreSenseAI'
+  WORKSPACE:      'ios/PreSenseAI.xcworkspace'
+  BUNDLE_ID:      'com.presenseai'
+
+jobs:
+  # ── Job 1: iOS Simulator Build (fast, no signing) ────────────────────────
+  ios-simulator:
+    name: 🔨 iOS Simulator Build
+    runs-on: macos-14    # Apple Silicon runner (M1) — faster pod install
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) || (github.event.inputs.destination == 'simulator')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Ruby (for CocoaPods)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          bundler-cache: true
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # Cache CocoaPods downloads (not Pods/ itself — regenerated per lockfile)
+      - name: Cache CocoaPods specs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cocoapods
+          key: pods-specs-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-specs-${{ runner.os }}-
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: pod install --repo-update
+
+      # Place TFLite model into iOS bundle
+      - name: Place TFLite model
+        run: |
+          if [ -n "${{ secrets.MODEL_TFLITE_BASE64 }}" ]; then
+            echo "${{ secrets.MODEL_TFLITE_BASE64 }}" | base64 -d \
+              > ios/PreSenseAI/presense_model.tflite
+            echo "✅ TFLite model restored"
+          else
+            touch ios/PreSenseAI/presense_model.tflite
+            echo "⚠️  Using placeholder model — JS fallback will activate"
+          fi
+
+      - name: Build for simulator
+        run: |
+          xcodebuild build \
+            -workspace ${{ env.WORKSPACE }} \
+            -scheme     ${{ env.SCHEME }} \
+            -sdk        iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty --color && exit ${PIPESTATUS[0]}
+
+      - name: Comment build status on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🍎 iOS Simulator Build\n\n✅ Build succeeded for iPhone 15 Pro simulator`
+            });
+
+  # ── Job 2: iOS Device / TestFlight Build (signed) ────────────────────────
+  ios-release:
+    name: 🚀 iOS Release → TestFlight
+    runs-on: macos-14
+    needs: []   # runs independently — triggered only on tag or manual
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release' || (github.event.inputs.destination == 'testflight') || (github.event.inputs.destination == 'device')
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          bundler-cache: true
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Cache CocoaPods specs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cocoapods
+          key: pods-specs-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-specs-${{ runner.os }}-
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: pod install --repo-update
+
+      # ── Code Signing Setup ────────────────────────────────────────────────
+      - name: Install Apple distribution certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD:             ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD:        ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERT_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/presense-signing.keychain-db
+
+          # Decode certificate
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERT_PATH
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate into keychain
+          security import $CERT_PATH \
+            -P "$P12_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          echo "✅ Distribution certificate installed"
+
+      - name: Install provisioning profile
+        env:
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        run: |
+          PP_PATH=$RUNNER_TEMP/presense_distribution.mobileprovision
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
+          echo "✅ Provisioning profile installed"
+
+      # ── TFLite Model ──────────────────────────────────────────────────────
+      - name: Place TFLite model
+        run: |
+          echo "${{ secrets.MODEL_TFLITE_BASE64 }}" | base64 -d \
+            > ios/PreSenseAI/presense_model.tflite
+          echo "✅ TFLite model: $(du -sh ios/PreSenseAI/presense_model.tflite)"
+
+      # ── Bundle & Archive ──────────────────────────────────────────────────
+      - name: Bundle JS (production)
+        run: |
+          npx react-native bundle \
+            --platform ios \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output ios/main.jsbundle \
+            --assets-dest ios
+
+      - name: Archive (xcodebuild)
+        run: |
+          xcodebuild archive \
+            -workspace ${{ env.WORKSPACE }} \
+            -scheme     ${{ env.SCHEME }} \
+            -sdk        iphoneos \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/PreSenseAI.xcarchive \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ env.SCHEME }}_Distribution" \
+            | xcpretty --color && exit ${PIPESTATUS[0]}
+
+      - name: Export IPA
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>${{ secrets.APPLE_TEAM_ID }}</string>
+              <key>uploadBitcode</key>
+              <false/>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>compileBitcode</key>
+              <false/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath   $RUNNER_TEMP/PreSenseAI.xcarchive \
+            -exportPath    $RUNNER_TEMP/export \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+            | xcpretty --color && exit ${PIPESTATUS[0]}
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: presense-ai-ios-${{ github.ref_name }}
+          path: ${{ runner.temp }}/export/PreSenseAI.ipa
+          retention-days: 30
+
+      # ── Upload to TestFlight ──────────────────────────────────────────────
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          # Decode App Store Connect API key
+          echo "${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}" | base64 -d \
+            > $RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
+
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$RUNNER_TEMP/export/PreSenseAI.ipa" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --verbose
+
+          echo "✅ Uploaded to TestFlight"
+
+      # ── Create GitHub Release ─────────────────────────────────────────────
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/export/PreSenseAI.ipa
+          generate_release_notes: true
+
+      # ── Cleanup signing artifacts ─────────────────────────────────────────
+      - name: Cleanup keychain & certs
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/presense-signing.keychain-db || true
+          rm -f $RUNNER_TEMP/build_certificate.p12
+          rm -f $RUNNER_TEMP/presense_distribution.mobileprovision
+          rm -f $RUNNER_TEMP/AuthKey_*.p8
+          echo "✅ Signing artifacts cleaned up"
