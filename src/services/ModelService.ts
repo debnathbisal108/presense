@@ -22,6 +22,19 @@
 import { Platform } from 'react-native';
 import type { FeatureVector } from './FeatureEngineeringService';
 
+
+let TFLite: any = null;
+let OrtModule: any = null;
+
+try {
+  TFLite = require('react-native-tflite');
+} catch {}
+
+try {
+  OrtModule = require('onnxruntime-react-native');
+} catch {}
+
+
 // ── Type definitions ──────────────────────────────────────────────────────────
 
 export interface RiskPrediction {
@@ -151,7 +164,7 @@ class ModelService {
       const modelFileName = 'presense_model.tflite';
 
       // react-native-tflite dynamically required to avoid crash when not installed
-      const TFLite = this.tryRequire('react-native-tflite');
+      // const TFLite = this.tryRequire('react-native-tflite');
       if (TFLite) {
         await TFLite.loadModel({
           model: modelFileName,
@@ -168,7 +181,7 @@ class ModelService {
       }
 
       // ── Attempt 2: ONNX Runtime Mobile ──────────────────────────────────
-      const OrtModule = this.tryRequire('onnxruntime-react-native');
+      // const OrtModule = this.tryRequire('onnxruntime-react-native');
       if (OrtModule) {
         const { InferenceSession } = OrtModule;
         const session = await InferenceSession.create(
@@ -291,7 +304,8 @@ class ModelService {
 
   /** ONNX Runtime on-device inference */
   private async runOnnxInference(input: number[]): Promise<[number, number, number]> {
-    const { Tensor } = require('onnxruntime-react-native');
+    // const { Tensor } = require('onnxruntime-react-native');
+    const { Tensor }  = OrtModule;   
     const feeds = {
       input: new Tensor('float32', Float32Array.from(input), [1, input.length]),
     };
@@ -335,13 +349,13 @@ class ModelService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private tryRequire(moduleName: string): any {
-    try {
-      return require(moduleName);
-    } catch {
-      return null;
-    }
-  }
+  // private tryRequire(moduleName: string): any {
+  //   try {
+  //     return require(moduleName);
+  //   } catch {
+  //     return null;
+  //   }
+  // }
 
   // ─── Utility methods ──────────────────────────────────────────────────────
 
