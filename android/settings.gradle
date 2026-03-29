@@ -3,8 +3,6 @@ pluginManagement {
         gradlePluginPortal()
         google()
         mavenCentral()
-        // React Native Gradle plugin
-        includeBuild("../node_modules/react-native-gradle-plugin")
     }
 }
 
@@ -18,3 +16,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "PreSenseAI"
 include ':app'
+
+// This is the important line for modern React Native:
+includeBuild('../node_modules/@react-native/gradle-plugin')
