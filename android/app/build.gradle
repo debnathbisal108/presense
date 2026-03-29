@@ -4,7 +4,6 @@ apply plugin: "com.facebook.react"
 
 android {
     namespace "com.presense"
-
     compileSdkVersion 34
 
     defaultConfig {
@@ -17,13 +16,19 @@ android {
 
     buildTypes {
         debug {}
+
         release {
             minifyEnabled false
-            // enableHermes true
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
 }
+
+// ←←← Add this block
+project.ext.react = [
+    enableHermes: true,
+    enableVmCleanup: false,   // This fixes many Hermes native crashes on startup
+]
 
 dependencies {
     implementation("com.facebook.react:react-android")
