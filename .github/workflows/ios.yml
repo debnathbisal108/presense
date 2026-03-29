@@ -78,7 +78,7 @@ jobs:
 
       # Cache CocoaPods downloads (not Pods/ itself — regenerated per lockfile)
       - name: Cache CocoaPods specs
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cocoapods
           key: pods-specs-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
@@ -154,7 +154,7 @@ jobs:
         run: npm ci
 
       - name: Cache CocoaPods specs
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cocoapods
           key: pods-specs-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
