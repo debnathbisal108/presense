@@ -19,6 +19,7 @@ android {
         debug {}
         release {
             minifyEnabled false
+            enableHermes true
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
