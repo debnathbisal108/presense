@@ -26,7 +26,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build APK
+      - name: Clean everything
+        run: |
+          rm -rf node_modules
+          rm -rf android/.gradle
+          rm -rf android/app/.cxx
+          rm -rf ~/.gradle/caches
+          npm ci   # or yarn install --frozen-lockfile
+    
+      - name: Build Debug APK
         run: |
           cd android
           ./gradlew assembleDebug
