@@ -19,7 +19,6 @@ class MainApplication : Application(), ReactApplication {
 
             override fun getJSMainModuleName(): String = "index"
 
-            // This was missing - important for debug builds
             override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
 
             override val isNewArchEnabled: Boolean
