@@ -1,65 +1,90 @@
-// android/app/build.gradle
-// PreSense AI — Android app-level build configuration
-
 apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 /**
- * React Native configuration
+ * This is the configuration block to customize your React Native Android app.
+ * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
 react {
     /* Folders */
-    root = file("../")
-    reactNativeDir = file("../node_modules/react-native")
-    codegenDir = file("../node_modules/@react-native/codegen")
-    cliFile = file("../node_modules/react-native/cli.js")
+    //   The root of your project, i.e. where "package.json" lives. Default is '../..'
+    // root = file("../../")
+    //   The folder where the react-native NPM package is. Default is ../../node_modules/react-native
+    // reactNativeDir = file("../../node_modules/react-native")
+    //   The folder where the react-native Codegen package is. Default is ../../node_modules/@react-native/codegen
+    // codegenDir = file("../../node_modules/@react-native/codegen")
+    //   The cli.js file which is the React Native CLI entrypoint. Default is ../../node_modules/react-native/cli.js
+    // cliFile = file("../../node_modules/react-native/cli.js")
+
+    /* Variants */
+    //   The list of variants to that are debuggable. For those we're going to
+    //   skip the bundling of the JS bundle and the assets. Default is "debug", "debugOptimized".
+    //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
+    // debuggableVariants = ["liteDebug", "liteDebugOptimized", "prodDebug", "prodDebugOptimized"]
 
     /* Bundling */
-    bundleAssetName = "index.android.bundle"
-    entryFile = file("../index.js")
+    //   A list containing the node command and its flags. Default is just 'node'.
+    // nodeExecutableAndArgs = ["node"]
+    //
+    //   The command to run when bundling. By default is 'bundle'
+    // bundleCommand = "ram-bundle"
+    //
+    //   The path to the CLI configuration file. Default is empty.
+    // bundleConfig = file(../rn-cli.config.js)
+    //
+    //   The name of the generated asset file containing your JS bundle
+    // bundleAssetName = "MyApplication.android.bundle"
+    //
+    //   The entry file for bundle generation. Default is 'index.android.js' or 'index.js'
+    // entryFile = file("../js/MyApplication.android.js")
+    //
+    //   A list of extra flags to pass to the 'bundle' commands.
+    //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
+    // extraPackagerArgs = []
 
-    /* Hermes JS engine (faster startup, lower memory) */
-    enableHermes = true
+    /* Hermes Commands */
+    //   The hermes compiler command to run. By default it is 'hermesc'
+    // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
+    //
+    //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
+    // hermesFlags = ["-O", "-output-source-map"]
+
+    /* Autolinking */
+    autolinkLibrariesWithApp()
 }
 
 /**
- * Release signing configuration.
- * Values are read from environment variables set by the CI workflow
- * (never hardcoded — keystore stays out of source control).
- *
- * Local development: create android/keystore.properties with:
- *   storeFile=presense-release.jks
- *   storePassword=YOUR_PASSWORD
- *   keyAlias=YOUR_ALIAS
- *   keyPassword=YOUR_KEY_PASSWORD
+ * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def keystorePropertiesFile = rootProject.file("keystore.properties")
-def keystoreProperties = new Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-}
+def enableProguardInReleaseBuilds = false
+
+/**
+ * The preferred build flavor of JavaScriptCore (JSC)
+ *
+ * For example, to use the international variant, you can use:
+ * `def jscFlavor = io.github.react-native-community:jsc-android-intl:2026004.+`
+ *
+ * The international variant includes ICU i18n library and necessary data
+ * allowing to use e.g. `Date.toLocaleString` and `String.localeCompare` that
+ * give correct results when using with locales other than en-US. Note that
+ * this variant is about 6MiB larger per architecture than default.
+ */
+def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
-    namespace "com.presenseai"
-    compileSdk rootProject.ext.compileSdkVersion
     ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
 
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-
+    namespace "com.helloworld"
     defaultConfig {
-        applicationId "com.presenseai"
-        minSdk rootProject.ext.minSdkVersion         // 26 (Android 8.0+)
-        targetSdk rootProject.ext.targetSdkVersion   // 34
-        versionCode  1
-        versionName  "1.0.0"
-
-        // Enable multidex for large dependency tree
-        multiDexEnabled true
+        applicationId "com.helloworld"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
     }
-
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -67,97 +92,28 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-
-        release {
-            // Prefer environment variables (CI) → fall back to keystore.properties (local)
-            if (System.getenv("PRESENSE_KEYSTORE_PATH")) {
-                storeFile     file(System.getenv("PRESENSE_KEYSTORE_PATH"))
-                storePassword System.getenv("PRESENSE_KEYSTORE_PASSWORD")
-                keyAlias      System.getenv("PRESENSE_KEY_ALIAS")
-                keyPassword   System.getenv("PRESENSE_KEY_PASSWORD")
-            } else if (keystorePropertiesFile.exists()) {
-                storeFile     file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
-                keyAlias      keystoreProperties['keyAlias']
-                keyPassword   keystoreProperties['keyPassword']
-            }
-        }
     }
-
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
-            debuggable true
-            // Disable Proguard in debug for faster builds
-            minifyEnabled false
-            applicationIdSuffix ".debug"
-            versionNameSuffix "-debug"
         }
-
         release {
-            signingConfig signingConfigs.release
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
-
-            // Strip debug symbols for smaller release APK
-            debuggable false
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.debug
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
-    }
-
-    // Enable NNAPI / hardware acceleration for TFLite
-    aaptOptions {
-        noCompress "tflite", "onnx"     // Don't compress ML model files
-    }
-
-    splits {
-        // Generate per-ABI APKs for smaller download size on Play Store
-        abi {
-            enable true
-            reset()
-            include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
-            universalApk true  // also generate a universal APK
-        }
-    }
-
-    packagingOptions {
-        pickFirst '**/libc++_shared.so'
-        pickFirst '**/libfbjni.so'
     }
 }
 
 dependencies {
+    // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
-    implementation("com.facebook.react:hermes-android")
 
-    // Health Connect
-    implementation "androidx.health.connect:connect-client:1.1.0-alpha07"
-
-    // TFLite (on-device inference)
-    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
-    implementation 'org.tensorflow:tensorflow-lite-gpu:2.14.0'        // GPU delegate
-    implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
-    implementation 'org.tensorflow:tensorflow-lite-task-vision:0.4.4' // optional
-
-    // NNAPI delegate (hardware acceleration on supported devices)
-    implementation 'org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.4'
-
-    // Multidex
-    implementation "androidx.multidex:multidex:2.0.1"
-}
-
-// Ensure the TFLite model is copied to assets before build
-preBuild.dependsOn {
-    tasks.register('validateModel') {
-        doLast {
-            def modelFile = file("src/main/assets/presense_model.tflite")
-            if (!modelFile.exists() || modelFile.length() == 0) {
-                logger.warn("⚠️  WARNING: presense_model.tflite is missing or empty.")
-                logger.warn("   The app will use JS fallback weights.")
-                logger.warn("   See MODEL_PLACEMENT.md for setup instructions.")
-            } else {
-                logger.info("✅ TFLite model found: ${modelFile.length()} bytes")
-            }
-        }
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
     }
 }
