@@ -7,7 +7,7 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 class MainActivity : ReactActivity() {
 
-    override fun getMainComponentName(): String = "PreSenseAI"   // Must match index.js exactly
+    override fun getMainComponentName(): String = "PreSenseAI"
 
     override fun createReactActivityDelegate(): ReactActivityDelegate =
         DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
