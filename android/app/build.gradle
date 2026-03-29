@@ -2,14 +2,10 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
-react {
-    autolinkLibrariesWithApp()
-}
-
 android {
-    compileSdkVersion 34
-
     namespace "com.presense"
+
+    compileSdkVersion 34
 
     defaultConfig {
         applicationId "com.presense"

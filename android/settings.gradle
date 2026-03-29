@@ -1,3 +1,20 @@
-rootProject.name = 'app'
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+        // React Native Gradle plugin
+        includeBuild("../node_modules/react-native-gradle-plugin")
+    }
+}
 
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "PreSenseAI"
 include ':app'
