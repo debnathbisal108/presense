@@ -26,7 +26,7 @@ android {
 
 // ←←← Add this block
 project.ext.react = [
-    enableHermes: true,
+    enableHermes: false,
     enableVmCleanup: false,   // This fixes many Hermes native crashes on startup
 ]
 
