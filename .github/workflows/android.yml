@@ -32,9 +32,11 @@ jobs:
           rm -rf android/.gradle
           rm -rf android/app/.cxx
           rm -rf ~/.gradle/caches
-          npm ci   # or yarn install --frozen-lockfile
-    
-      - name: Build Debug APK
+      
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+      
+      - name: Build Debug APK (try debug first)
         run: |
           cd android
           ./gradlew assembleDebug
